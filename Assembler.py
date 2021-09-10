@@ -20,18 +20,18 @@ class Assembler():
         self.instruction_args = {
             "NOP": False,
             "LDA": False,
-            "ADD": False,
-            "SUB": False,
+            "ADD": True,
+            "SUB": True,
             "LDI": True,
-            "STA": False,
+            "STA": True,
             "JMP": True,
             "JEQ": True,
-            "CEQ": False,
+            "CEQ": True,
             "JSR": True,
             "RET": False
         } 
 
-        self.vhdl = '--         OPCode     Imediate\n'
+        self.vhdl = '--   \t\t   OPCode     Imediate\n'
         ## tmp(0)  := "0100" & "0" & "00000100";
 
 
@@ -48,7 +48,7 @@ class Assembler():
             if not instruction_line: # Vazio
                 continue # avança
             instruction_components = instruction_line.split(" ")
-            instruction_current = instruction_components[0]
+            instruction_current = instruction_components[0].upper()
             if instruction_current in self.instruction_translator.keys():
                 if self.instruction_args[instruction_current]:
                     if len(instruction_components) < 2:
@@ -58,9 +58,13 @@ class Assembler():
                     instruction_argument = 0
                 translated_instruction = self.instruction_translator[instruction_current]
                 if instruction_argument != 0:
-                    self.vhdl += f'tmp({line})  := "{translated_instruction}" & "{instruction_argument:09b}"; -- {instruction_current} {instruction_argument}\n'
+                    # Memory access instructions need to start the address with 1
+                    if instruction_current not in ["JMP", "LDI", "JEQ"]:
+                        self.vhdl += f'tmp({line})\t\t:= "{translated_instruction}" & "1{instruction_argument:08b}"; -- {instruction_current} {instruction_argument}\n'
+                    else:
+                        self.vhdl += f'tmp({line})\t\t:= "{translated_instruction}" & "{instruction_argument:09b}"; -- {instruction_current} {instruction_argument}\n'
                 else:
-                    self.vhdl += f'tmp({line})  := "{translated_instruction}" & "{instruction_argument:09b}"; -- {instruction_current}\n'
+                    self.vhdl += f'tmp({line})\t\t:= "{translated_instruction}" & "{instruction_argument:09b}"; -- {instruction_current}\n'
 
     def writeVHDL(self, filename):
         try:

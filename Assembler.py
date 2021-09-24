@@ -1,4 +1,6 @@
 import numpy as np
+import tkinter.filedialog as tkfd
+from tkinter import Tk
 
 class Assembler():
 
@@ -9,6 +11,7 @@ class Assembler():
         NÃO USAR VÍRGULAS, SEPARADOR = ' '
         REGISTRADORES NOMEADOS DE 0 a 7 (8)
         DEFINIÇÕES DE FUNÇÃO SEMPRE NO COMEÇO DO ARQUIVO
+        
 
         DEF FUNC
         NOP
@@ -20,7 +23,7 @@ class Assembler():
         JMP MEM_ADDR
         JEQ MEM_ADDR
         CEQ REG MEM_ADDR
-        JSR MEM_ADDR
+        JSR MEM_ADDR/FUNC_NAME
         RET
         """
 
@@ -74,23 +77,27 @@ class Assembler():
 
         self.sr_map={}
 
-        self.vhdl = '--\t\t\t   OPCode   REG\t\tImediate\n'
+        self.vhdl = '-- Traduzido automaticament via python\n'
+        self.func_vhdl = '\n'
         self.lineCounter = 0
         self.finalMemoryAddress = 511
 
-    def readFile(self, filename):
+    def readFile(self):
+        Tk().withdraw()
+        filename = ""
+        filename = tkfd.askopenfilename(title='Indicate assembly file')
         try:
             with open(filename, "r") as f:
                 self.data = f.read()
                 for k,v in self.symbol_table.items():
                     self.data = self.data.replace(k, str(v))
                 self.data = self.data.split("\n")
-
         except Exception as e:
             print(f"Error reading file!\n {e}")
 
     def defineSubroutine(self, instruction_line, line):
         SR_name = instruction_line.split(" ")[1]
+        self.func_vhdl += f"-- DEF Subrotina {SR_name}\n"
         line_index = line
         next = self.data[line_index]
         size_counter = 1
@@ -107,6 +114,8 @@ class Assembler():
         for i in range(1,size_counter):
             instruction_components = self.data[line+i].split(" ")
             instruction_current = instruction_components[0].upper()
+            if instruction_current == "DEF":
+                raise Exception("Sub-Subroutines not allowed! Either you forgot to RET or you tried using a DEF inside a Subroutine!")
             if instruction_current in self.instruction_translator.keys():
                 arg_count = self.instruction_args[instruction_current]
                 translated_instruction = self.instruction_translator[instruction_current]
@@ -116,16 +125,15 @@ class Assembler():
                     instruction_argument_list = instruction_components[1:]
                     if arg_count == 1:
                         address = int(instruction_argument_list[0])
-                        self.vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{0:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
+                        self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{0:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
                     elif arg_count == 2:
                         reg = int(instruction_argument_list[0])
                         address = int(instruction_argument_list[1])
-                        self.vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{reg:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
+                        self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{reg:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
                 else:
-                    self.vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{0:03b}" & "{0:09b}"; -- {instruction_current}\n'
+                    self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{0:03b}" & "{0:09b}"; -- {instruction_current}\n'
+        self.func_vhdl+="\n"
         return size_counter
-
-
 
     def processData(self):
         skip_lines = 0
@@ -133,8 +141,10 @@ class Assembler():
             if skip_lines > 0:
                 skip_lines -= 1
                 continue
-            if instruction_line == "" or instruction_line.startswith("--"): # Vazio
+            if instruction_line == "": # Vazio
                 continue # avança
+            if instruction_line.startswith("--"):
+                self.func_vhdl += instruction_line
             instruction_components = instruction_line.split(" ")
             instruction_current = instruction_components[0].upper()
             
@@ -175,14 +185,14 @@ class Assembler():
     def writeVHDL(self, filename):
         try:
             with open(filename, "w") as f:
-                f.write(self.vhdl)
+                f.write(self.vhdl + self.func_vhdl)
         except Exception as e:
             print(f"Error writing file!\n {e}")
 
 
 if __name__ == "__main__":
     assembler = Assembler()
-    assembler.readFile("assembly2.txt")
+    assembler.readFile()
     assembler.processData()
     assembler.writeVHDL("out.txt")
 

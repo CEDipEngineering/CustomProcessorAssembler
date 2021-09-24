@@ -3,8 +3,29 @@ import numpy as np
 class Assembler():
 
     def __init__(self):
+
+        """
+        Manual:
+        NÃO USAR VÍRGULAS, SEPARADOR = ' '
+        REGISTRADORES NOMEADOS DE 0 a 7 (8)
+        DEFINIÇÕES DE FUNÇÃO SEMPRE NO COMEÇO DO ARQUIVO
+
+        DEF FUNC
+        NOP
+        LDA REG MEM_ADDR
+        ADD REG MEM_ADDR
+        SUB REG MEM_ADDR
+        LDI REG VALUE (0-255)
+        STA REG MEM_ADDR
+        JMP MEM_ADDR
+        JEQ MEM_ADDR
+        CEQ REG MEM_ADDR
+        JSR MEM_ADDR
+        RET
+        """
+
+
         self.instruction_translator = {
-            "NOP": "0000",
             "LDA": "0001",
             "ADD": "0010",
             "SUB": "0011",
@@ -18,53 +39,138 @@ class Assembler():
         } 
 
         self.instruction_args = {
-            "NOP": False,
-            "LDA": False,
-            "ADD": True,
-            "SUB": True,
-            "LDI": True,
-            "STA": True,
-            "JMP": True,
-            "JEQ": True,
-            "CEQ": True,
-            "JSR": True,
-            "RET": False
+            "LDA": 2,
+            "ADD": 2,
+            "SUB": 2,
+            "LDI": 2,
+            "STA": 2,
+            "JMP": 1,
+            "JEQ": 1,
+            "CEQ": 2,
+            "JSR": 1,
+            "RET": 0
+        }
+
+        self.symbol_table = {
+            "LED0TO7":256,
+            "LED8": 257,
+            "LED9": 258,
+            "HEX0":288,
+            "HEX1":289,
+            "HEX2":290,
+            "HEX3":291,  
+            "HEX4":292,
+            "HEX5":293,
+            "SW7TO0":320,
+            "SW8":321,
+            "SW9":322,
+            "KEY0":352,
+            "KEY1":353,
+            "KEY2":354,
+            "KEY3":355,
+            "RST":356,
+            "CLR":511
         } 
 
-        self.vhdl = '--   \t\t   OPCode     Imediate\n'
-        ## tmp(0)  := "0100" & "0" & "00000100";
+        self.sr_map={}
 
+        self.vhdl = '--\t\t\t   OPCode   REG\t\tImediate\n'
+        self.lineCounter = 0
+        self.finalMemoryAddress = 511
 
     def readFile(self, filename):
         try:
             with open(filename, "r") as f:
-                self.data = f.read().split("\n")
+                self.data = f.read()
+                for k,v in self.symbol_table.items():
+                    self.data = self.data.replace(k, str(v))
+                self.data = self.data.split("\n")
+
         except Exception as e:
             print(f"Error reading file!\n {e}")
 
+    def defineSubroutine(self, instruction_line, line):
+        SR_name = instruction_line.split(" ")[1]
+        line_index = line
+        next = self.data[line_index]
+        size_counter = 1
+        while next != "RET":
+            line_index += 1
+            next = self.data[line_index]
+            size_counter += 1
+        if SR_name in self.sr_map.keys():
+            print("Function names must be unique")
+            return 0
+        else:
+            self.finalMemoryAddress -= size_counter
+            self.sr_map[SR_name] = self.finalMemoryAddress + 2
+        for i in range(1,size_counter):
+            instruction_components = self.data[line+i].split(" ")
+            instruction_current = instruction_components[0].upper()
+            if instruction_current in self.instruction_translator.keys():
+                arg_count = self.instruction_args[instruction_current]
+                translated_instruction = self.instruction_translator[instruction_current]
+                if arg_count != 0:
+                    if len(instruction_components) < arg_count+1:
+                        print(f"Instruction on line {line+i} is invalid! {instruction_current} requires an argument!")
+                    instruction_argument_list = instruction_components[1:]
+                    if arg_count == 1:
+                        address = int(instruction_argument_list[0])
+                        self.vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{0:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
+                    elif arg_count == 2:
+                        reg = int(instruction_argument_list[0])
+                        address = int(instruction_argument_list[1])
+                        self.vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{reg:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
+                else:
+                    self.vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{0:03b}" & "{0:09b}"; -- {instruction_current}\n'
+        return size_counter
+
+
+
     def processData(self):
-        
+        skip_lines = 0
         for line, instruction_line in enumerate(self.data):
-            if not instruction_line: # Vazio
+            if skip_lines > 0:
+                skip_lines -= 1
+                continue
+            if instruction_line == "" or instruction_line.startswith("--"): # Vazio
                 continue # avança
             instruction_components = instruction_line.split(" ")
             instruction_current = instruction_components[0].upper()
+            
+            if instruction_current.upper() == "NOP":
+                self.lineCounter += 1
+                continue
+
+            if instruction_current.upper() == "DEF":
+                skip_lines = self.defineSubroutine(instruction_line, line)               
+                continue
+            
+            for k,v in self.sr_map.items():
+                instruction_line = instruction_line.replace(k, str(v))
+
+            instruction_components = instruction_line.split(" ")
+            instruction_current = instruction_components[0].upper()
+
             if instruction_current in self.instruction_translator.keys():
-                if self.instruction_args[instruction_current]:
-                    if len(instruction_components) < 2:
-                        print(f"Instruction on line {line} is invalid! {instruction_current} requires an argument!")
-                    instruction_argument = int(instruction_components[1])
-                else:
-                    instruction_argument = 0
+                arg_count = self.instruction_args[instruction_current]
                 translated_instruction = self.instruction_translator[instruction_current]
-                if instruction_argument != 0:
-                    # Memory access instructions need to start the address with 1
-                    if instruction_current not in ["JMP", "LDI", "JEQ"]:
-                        self.vhdl += f'tmp({line})\t\t:= "{translated_instruction}" & "1{instruction_argument:08b}"; -- {instruction_current} {instruction_argument}\n'
-                    else:
-                        self.vhdl += f'tmp({line})\t\t:= "{translated_instruction}" & "{instruction_argument:09b}"; -- {instruction_current} {instruction_argument}\n'
+                if arg_count != 0:
+                    if len(instruction_components) < arg_count+1:
+                        print(f"Instruction on line {line} is invalid! {instruction_current} requires an argument!")
+                    instruction_argument_list = instruction_components[1:]
+                    if arg_count == 1:
+                        address = int(instruction_argument_list[0])
+                        self.vhdl += f'tmp({self.lineCounter})\t\t:= "{translated_instruction}" & "{0:03b}" & "{address:09b}"; -- {instruction_line}\n'
+                        self.lineCounter += 1
+                    elif arg_count == 2:
+                        reg = int(instruction_argument_list[0])
+                        address = int(instruction_argument_list[1])
+                        self.vhdl += f'tmp({self.lineCounter})\t\t:= "{translated_instruction}" & "{reg:03b}" & "{address:09b}"; -- {instruction_line}\n'
+                        self.lineCounter += 1
                 else:
-                    self.vhdl += f'tmp({line})\t\t:= "{translated_instruction}" & "{instruction_argument:09b}"; -- {instruction_current}\n'
+                    self.vhdl += f'tmp({self.lineCounter})\t\t:= "{translated_instruction}" & "{0:03b}" & "{0:09b}"; -- {instruction_current}\n'
+                    self.lineCounter += 1
 
     def writeVHDL(self, filename):
         try:
@@ -76,7 +182,7 @@ class Assembler():
 
 if __name__ == "__main__":
     assembler = Assembler()
-    assembler.readFile("sampleAssembly.txt")
+    assembler.readFile("assembly2.txt")
     assembler.processData()
     assembler.writeVHDL("out.txt")
 

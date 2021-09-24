@@ -12,7 +12,7 @@ class Assembler():
         NÃO USAR VÍRGULAS, SEPARADOR = ' '
         
         REGISTRADORES NOMEADOS DE 0 a 7 (8) OU ALTERNATIVAMENTE
-        RA a RF PARA REGISTRADORES DE USO GERAL, RI PARA CONTADORES E RX PARA RETORNOS DE FUNÇÃO 
+        RA a RD + RX,RY PARA REGISTRADORES DE USO GERAL, RI PARA CONTADORES E RR PARA RETORNOS DE FUNÇÃO 
         
         DEFINIÇÕES DE FUNÇÃO SEMPRE NO COMEÇO DO ARQUIVO
         
@@ -114,26 +114,28 @@ class Assembler():
         SR_name = instruction_line.split(" ")[1].upper()
         self.func_vhdl += f"-- DEF Subrotina {SR_name.upper()}\n"
         line_index = line
-        next = self.data[1]
+        next = self.data[line_index]
         size_counter = 1
-        while next.strip() != "RET":
-            print(next)
-            line_index += 1
-            next = self.data[line_index]
-            if next == "" or next.startswith("--"):
-                continue
-            size_counter += 1
         if SR_name.upper() in self.sr_map.keys():
             print("Function names must be unique")
             return 0
-        else:
-            self.finalMemoryAddress -= size_counter
-            self.sr_map[SR_name.upper()] = self.finalMemoryAddress + 2
+        while next.strip() != "RET":
+            line_index += 1
+            next = self.data[line_index]
+            if next == "":
+                continue
+            size_counter += 1
+        self.finalMemoryAddress -= size_counter
+        self.sr_map[SR_name.upper()] = self.finalMemoryAddress + 2
+        comment_offset = 0
         for i in range(1,size_counter):
             instruction_components = self.data[line+i].split(" ")
             instruction_current = instruction_components[0].upper()
             if instruction_current == "DEF":
                 raise Exception("Sub-Subroutines not allowed! Either you forgot to RET or you tried using a DEF inside a Subroutine!")
+            if instruction_current.startswith("--"):
+                comment_offset += 1
+                continue
             if instruction_current in self.instruction_translator.keys():
                 arg_count = self.instruction_args[instruction_current]
                 translated_instruction = self.instruction_translator[instruction_current]
@@ -143,13 +145,13 @@ class Assembler():
                     instruction_argument_list = instruction_components[1:]
                     if arg_count == 1:
                         address = self._parseAddress(instruction_argument_list[0], self.finalMemoryAddress+i+1)
-                        self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{0:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
+                        self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1-comment_offset})\t\t:= "{translated_instruction}" & "{0:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
                     elif arg_count == 2:
                         reg = int(instruction_argument_list[0])
                         address = int(instruction_argument_list[1])
-                        self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{reg:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
+                        self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1-comment_offset})\t\t:= "{translated_instruction}" & "{reg:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
                 else:
-                    self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{0:03b}" & "{0:09b}"; -- {instruction_current}\n'
+                    self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1-comment_offset})\t\t:= "{translated_instruction}" & "{0:03b}" & "{0:09b}"; -- {instruction_current}\n'
         self.func_vhdl+="\n"
         return size_counter
 

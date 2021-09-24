@@ -8,13 +8,19 @@ class Assembler():
 
         """
         Manual:
+       
         NÃO USAR VÍRGULAS, SEPARADOR = ' '
-        REGISTRADORES NOMEADOS DE 0 a 7 (8)
+        
+        REGISTRADORES NOMEADOS DE 0 a 7 (8) OU ALTERNATIVAMENTE
+        RA a RF PARA REGISTRADORES DE USO GERAL, RI PARA CONTADORES E RX PARA RETORNOS DE FUNÇÃO 
+        
         DEFINIÇÕES DE FUNÇÃO SEMPRE NO COMEÇO DO ARQUIVO
         
+        QUANDO INDICANDO ENDEREÇOS PARA COMANDOS JUMP, É POSSÍVEL INDICAR SALTOS RELATIVOS, COMO
+        JMP +5 INDICA, SALTE CINCO POSIÇÕES ADIANTE, OU JEQ -5 INDICA, CASO CEQ, SALTE 5 POSIÇÕES PARA TRÁS
 
-        DEF FUNC
         NOP
+        DEF FUNC_NAME
         LDA REG MEM_ADDR
         ADD REG MEM_ADDR
         SUB REG MEM_ADDR
@@ -72,7 +78,16 @@ class Assembler():
             "KEY2":354,
             "KEY3":355,
             "RST":356,
-            "CLR":511
+            "FPGA_RESET":356,
+            "CLR":511,
+            "RA":0,
+            "RB":1,
+            "RC":2,
+            "RD":3,
+            "RX":4,
+            "RY":5,
+            "RI":6,
+            "RR":7           
         } 
 
         self.sr_map={}
@@ -87,7 +102,7 @@ class Assembler():
         filename = ""
         filename = tkfd.askopenfilename(title='Indicate assembly file')
         try:
-            with open(filename, "r") as f:
+            with open(filename, "r", encoding="utf-8") as f:
                 self.data = f.read()
                 for k,v in self.symbol_table.items():
                     self.data = self.data.replace(k, str(v))
@@ -95,22 +110,25 @@ class Assembler():
         except Exception as e:
             print(f"Error reading file!\n {e}")
 
-    def defineSubroutine(self, instruction_line, line):
-        SR_name = instruction_line.split(" ")[1]
-        self.func_vhdl += f"-- DEF Subrotina {SR_name}\n"
+    def _defineSubroutine(self, instruction_line, line):
+        SR_name = instruction_line.split(" ")[1].upper()
+        self.func_vhdl += f"-- DEF Subrotina {SR_name.upper()}\n"
         line_index = line
-        next = self.data[line_index]
+        next = self.data[1]
         size_counter = 1
-        while next != "RET":
+        while next.strip() != "RET":
+            print(next)
             line_index += 1
             next = self.data[line_index]
+            if next == "" or next.startswith("--"):
+                continue
             size_counter += 1
-        if SR_name in self.sr_map.keys():
+        if SR_name.upper() in self.sr_map.keys():
             print("Function names must be unique")
             return 0
         else:
             self.finalMemoryAddress -= size_counter
-            self.sr_map[SR_name] = self.finalMemoryAddress + 2
+            self.sr_map[SR_name.upper()] = self.finalMemoryAddress + 2
         for i in range(1,size_counter):
             instruction_components = self.data[line+i].split(" ")
             instruction_current = instruction_components[0].upper()
@@ -124,7 +142,7 @@ class Assembler():
                         print(f"Instruction on line {line+i} is invalid! {instruction_current} requires an argument!")
                     instruction_argument_list = instruction_components[1:]
                     if arg_count == 1:
-                        address = int(instruction_argument_list[0])
+                        address = self._parseAddress(instruction_argument_list[0], self.finalMemoryAddress+i+1)
                         self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{0:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
                     elif arg_count == 2:
                         reg = int(instruction_argument_list[0])
@@ -134,6 +152,15 @@ class Assembler():
                     self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1})\t\t:= "{translated_instruction}" & "{0:03b}" & "{0:09b}"; -- {instruction_current}\n'
         self.func_vhdl+="\n"
         return size_counter
+
+    def _parseAddress(self, address_str, currentLine):
+        if address_str.startswith("+"):
+            out = int(address_str[1:])+currentLine
+        elif address_str.startswith("-"):
+            out = int(address_str[1:])-currentLine
+        else:
+            out = int(address_str)
+        return out
 
     def processData(self):
         skip_lines = 0
@@ -153,11 +180,11 @@ class Assembler():
                 continue
 
             if instruction_current.upper() == "DEF":
-                skip_lines = self.defineSubroutine(instruction_line, line)               
+                skip_lines = self._defineSubroutine(instruction_line, line)               
                 continue
             
             for k,v in self.sr_map.items():
-                instruction_line = instruction_line.replace(k, str(v))
+                instruction_line = instruction_line.upper().replace(k, str(v))
 
             instruction_components = instruction_line.split(" ")
             instruction_current = instruction_components[0].upper()
@@ -170,7 +197,7 @@ class Assembler():
                         print(f"Instruction on line {line} is invalid! {instruction_current} requires an argument!")
                     instruction_argument_list = instruction_components[1:]
                     if arg_count == 1:
-                        address = int(instruction_argument_list[0])
+                        address = self._parseAddress(instruction_argument_list[0], self.lineCounter)
                         self.vhdl += f'tmp({self.lineCounter})\t\t:= "{translated_instruction}" & "{0:03b}" & "{address:09b}"; -- {instruction_line}\n'
                         self.lineCounter += 1
                     elif arg_count == 2:
@@ -183,8 +210,9 @@ class Assembler():
                     self.lineCounter += 1
 
     def writeVHDL(self, filename):
+        self.vhdl += f"\n-- END OF MAIN --\n-- DEFINED SUBROUTINES BELOW --\n"
         try:
-            with open(filename, "w") as f:
+            with open(filename, "w", encoding="utf-8") as f:
                 f.write(self.vhdl + self.func_vhdl)
         except Exception as e:
             print(f"Error writing file!\n {e}")

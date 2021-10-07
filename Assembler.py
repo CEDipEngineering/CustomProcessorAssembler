@@ -79,7 +79,8 @@ class Assembler():
             "KEY3":355,
             "RST":356,
             "FPGA_RESET":356,
-            "CLR":511,
+            "CLR1":510,
+            "CLR0":511,
             "RA":0,
             "RB":1,
             "RC":2,
@@ -92,7 +93,30 @@ class Assembler():
 
         self.sr_map={}
 
-        self.vhdl = '-- Traduzido automaticament via python\n'
+        self.vhdl = '''
+library IEEE;
+use IEEE.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity memoriaROM is
+generic (
+        dataWidth: natural := 8;
+        addrWidth: natural := 4
+    );
+port (
+        Endereco : in std_logic_vector (addrWidth-1 DOWNTO 0);
+        Dado : out std_logic_vector (dataWidth-1 DOWNTO 0)
+    );
+end entity;
+
+architecture assincrona of memoriaROM is
+
+type blocoMemoria is array(0 TO 2**addrWidth - 1) of std_logic_vector(dataWidth-1 DOWNTO 0);
+
+function initMemory
+        return blocoMemoria is variable tmp : blocoMemoria := (others => (others => '0'));
+begin 
+\n-- Traduzido automaticament via python\n'''
         self.func_vhdl = '\n'
         self.lineCounter = 0
         self.finalMemoryAddress = 511
@@ -101,6 +125,7 @@ class Assembler():
         Tk().withdraw()
         filename = ""
         filename = tkfd.askopenfilename(title='Indicate assembly file')
+        print(f"Chosen file: {filename}")
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 self.data = f.read()
@@ -144,7 +169,7 @@ class Assembler():
                         print(f"Instruction on line {line+i} is invalid! {instruction_current} requires an argument!")
                     instruction_argument_list = instruction_components[1:]
                     if arg_count == 1:
-                        address = self._parseAddress(instruction_argument_list[0], self.finalMemoryAddress+i+1)
+                        address = self._parseAddress(instruction_argument_list[0], self.finalMemoryAddress+i+1-comment_offset)
                         self.func_vhdl += f'tmp({self.finalMemoryAddress+i+1-comment_offset})\t\t:= "{translated_instruction}" & "{0:03b}" & "{address:09b}"; -- {self.data[line+i]}\n'
                     elif arg_count == 2:
                         reg = int(instruction_argument_list[0])
@@ -159,7 +184,7 @@ class Assembler():
         if address_str.startswith("+"):
             out = int(address_str[1:])+currentLine
         elif address_str.startswith("-"):
-            out = int(address_str[1:])-currentLine
+            out = currentLine-int(address_str[1:])
         else:
             out = int(address_str)
         return out
@@ -172,8 +197,8 @@ class Assembler():
                 continue
             if instruction_line == "": # Vazio
                 continue # avança
-            if instruction_line.startswith("--"):
-                self.func_vhdl += instruction_line
+            # if instruction_line.startswith("--"):
+            #     self.func_vhdl += instruction_line+"\n"
             instruction_components = instruction_line.split(" ")
             instruction_current = instruction_components[0].upper()
             
@@ -215,16 +240,26 @@ class Assembler():
         self.vhdl += f"\n-- END OF MAIN --\n-- DEFINED SUBROUTINES BELOW --\n"
         try:
             with open(filename, "w", encoding="utf-8") as f:
-                f.write(self.vhdl + self.func_vhdl)
+                f.write(self.vhdl + self.func_vhdl + '''
+return tmp;
+    end initMemory;
+
+    signal memROM : blocoMemoria := initMemory;
+
+begin
+    Dado <= memROM (to_integer(unsigned(Endereco)));
+end architecture;
+''')
         except Exception as e:
             print(f"Error writing file!\n {e}")
 
 
 if __name__ == "__main__":
+    print("Starting!")
     assembler = Assembler()
     assembler.readFile()
     assembler.processData()
     assembler.writeVHDL("out.txt")
-
+    print("Done!")
 
 

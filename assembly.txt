@@ -16,6 +16,7 @@ STA RY LED9
 LDA RI 51
 STA RI CLR0
 STA RI CLR1
+STA RI CLRT
 -- MEM[50] = 0
 LDI RY 0
 STA RY 50
@@ -25,6 +26,9 @@ STA RY 51
 -- MEM[52] = 2
 LDI RY 2
 STA RY 52
+-- MEM[55] = 4
+LDI RY 4
+STA RY 55
 -- MEM[53] = 6
 LDI RY 6
 STA RY 53
@@ -32,16 +36,19 @@ STA RY 53
 LDI RY 10
 STA RY 54
 -- Limites para cada contador 6 - 11
-LDI RY 0
-STA RY 6
-STA RY 7
-STA RY 8
-STA RY 9
-STA RY 10
+LDI RY 2
 STA RY 11
+LDI RY 5
+STA RY 7
+STA RY 9
+LDI RY 9
+STA RY 6
+STA RY 8
+LDI RY 3
+STA RY 10
 -- Contadores de quantidades (um pra cada HEX) 0 - 5
 LDI RY 0
-STA RY 0
+STA RY 13
 STA RY 1
 STA RY 2
 STA RY 3
@@ -49,30 +56,26 @@ STA RY 4
 STA RY 5
 -- Flags
 LDI RY 0
--- Flag _stop_
-STA RY 12 
+-- Flag _stop_ 
 RET
 
 DEF INCREMENT
-STA RA CLR0
-LDA RB 12
-CEQ RB 51
-JEQ +50 -- Se flag = 1 FIM
-LDA RX 0
+STA RA CLRT
+LDA RX 13
 ADD RX 51
 CEQ RX 54
 JEQ +3
-STA RX 0 -- Guarda unidades e RET
-JMP +44
+STA RX 13 -- Guarda unidades e RET
+JMP 446
 -- Dezenas
 LDA RX 50
-STA RX 0 -- Guarda zero unidades
+STA RX 13 -- Guarda zero unidades
 LDA RX 1
 ADD RX 51
-CEQ RX 54
+CEQ RX 53
 JEQ +3
 STA RX 1
-JMP +36
+JMP 446
 -- Centenas
 LDA RX 50
 STA RX 1 -- Guarda zero dezenas
@@ -81,16 +84,16 @@ ADD RX 51
 CEQ RX 54
 JEQ +3
 STA RX 2
-JMP +28
+JMP 446
 -- Milhares
 LDA RX 50
 STA RX 2 -- Guarda zero Centenas
 LDA RX 3
 ADD RX 51
-CEQ RX 54
+CEQ RX 53
 JEQ +3
 STA RX 3
-JMP +20
+JMP 446
 -- Dezenas de Milhares
 LDA RX 50
 STA RX 3 -- Guarda zero Milhares
@@ -99,24 +102,17 @@ ADD RX 51
 CEQ RX 54
 JEQ +3
 STA RX 4
-JMP +12
+JMP 446
 -- Centenas de Milhares
 LDA RX 50
 STA RX 4 -- Guarda zero Dezenas de Milhares
 LDA RX 5
 ADD RX 51
-CEQ RX 54
-JEQ +3
 STA RX 5
-JMP +4
--- Overflow
-LDA RB 51
-STA RB 12
-STA RB LED9
 RET
 
 DEF UPDATE_DISPLAY
-LDA RY 0
+LDA RY 13
 STA RY HEX0
 LDA RY 1
 STA RY HEX1
@@ -130,12 +126,12 @@ LDA RY 5
 STA RY HEX5
 RET
 
-DEF CONFIG_LIM
+DEF CONFIG_TIME
 -- unidades
 LDI RD 1
 STA RD LED0TO7
 LDA RY SW7TO0
-STA RY 6
+STA RY 13
 -- dezenas
 LDA RX KEY1
 CEQ RX 50
@@ -143,7 +139,7 @@ JEQ -2
 LDA RI 51
 STA RI CLR1
 LDA RY SW7TO0
-STA RY 7
+STA RY 1
 LDI RD 3
 STA RD LED0TO7
 -- centenas
@@ -153,7 +149,7 @@ JEQ -2
 LDA RI 51
 STA RI CLR1
 LDA RY SW7TO0
-STA RY 8
+STA RY 2
 LDI RD 7
 STA RD LED0TO7
 -- milhares
@@ -163,7 +159,7 @@ JEQ -2
 LDA RI 51
 STA RI CLR1
 LDA RY SW7TO0
-STA RY 9
+STA RY 3
 LDI RD 15
 STA RD LED0TO7
 -- dezenas de milhares
@@ -173,7 +169,7 @@ JEQ -2
 LDA RI 51
 STA RI CLR1
 LDA RY SW7TO0
-STA RY 10
+STA RY 4
 LDI RD 31
 STA RD LED0TO7
 -- centenas de milhares
@@ -183,57 +179,62 @@ JEQ -2
 LDA RI 51
 STA RI CLR1
 LDA RY SW7TO0
-STA RY 11
+STA RY 5
 LDI RD 0
 STA RD LED0TO7
 RET
 
 DEF CHECK_LIM
 -- Compara unidades
+LDA RI 50
 LDA RD 6
-CEQ RD 0
+CEQ RD 13
 JEQ +2
-JMP +24
+JMP 322
 -- Compara dezenas
 LDA RD 7
 CEQ RD 1
 JEQ +2
-JMP +20
+JMP 322
 -- Compara centenas
 LDA RD 8
 CEQ RD 2
 JEQ +2
-JMP +16
+JMP 322
 -- Compara milhares
 LDA RD 9
 CEQ RD 3
 JEQ +2
-JMP +12
+JMP 322
 -- Compara dezenas de milhares
 LDA RD 10
 CEQ RD 4
 JEQ +2
-JMP +8
+JMP 322
 -- Compara centenas de milhares
 LDA RD 11
 CEQ RD 5
 JEQ +2
-JMP +4
+JMP 322
 -- Tudo igual
-LDI RX 1
-STA RX 12
-STA RX LED9
-RET
-
-DEF RESET_COUNT
 LDI RY 0
-STA RY 0
+STA RY 13
 STA RY 1
 STA RY 2
 STA RY 3
 STA RY 4
 STA RY 5
-STA RY 12
+STA RY LED9
+RET
+
+DEF RESET_COUNT
+LDI RY 0
+STA RY 13
+STA RY 1
+STA RY 2
+STA RY 3
+STA RY 4
+STA RY 5
 STA RY LED8
 STA RY LED9
 RET
@@ -242,7 +243,7 @@ RET
 JSR Init
 -- Loop Principal
 -- Le Key0 e vai para rotina de incremento, caso necessario
-LDA RA KEY0
+LDA RA TIME
 CEQ RA 50
 JEQ +2
 JSR INCREMENT
@@ -254,13 +255,13 @@ CEQ RB 50
 JEQ +4
 LDA RI 51
 STA RI CLR1
-JSR CONFIG_LIM
+JSR CONFIG_TIME
 -- Verifica se a contagem atingiu limite
 JSR CHECK_LIM
 -- Le FPGA_RESET e reinicia contagem caso necessario
 LDA RA RST
-CEQ RA 50
+CEQ RA 51
 JEQ +2
 JSR RESET_COUNT
 -- Colta para começo
-JMP -18
+JMP 1

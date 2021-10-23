@@ -8,14 +8,16 @@ class Assembler():
 
         """
         Manual:
-       
+
         NÃO USAR VÍRGULAS, SEPARADOR = ' '
-        
+
+        NÃO DEIXAR LINHAS EM BRANCO DENTRO DE SUBROTINAS
+
         REGISTRADORES NOMEADOS DE 0 a 7 (8) OU ALTERNATIVAMENTE
         RA a RD + RX,RY PARA REGISTRADORES DE USO GERAL, RI PARA CONTADORES E RR PARA RETORNOS DE FUNÇÃO 
-        
+
         DEFINIÇÕES DE FUNÇÃO SEMPRE NO COMEÇO DO ARQUIVO
-        
+
         QUANDO INDICANDO ENDEREÇOS PARA COMANDOS JUMP, É POSSÍVEL INDICAR SALTOS RELATIVOS, COMO
         JMP +5 INDICA, SALTE CINCO POSIÇÕES ADIANTE, OU JEQ -5 INDICA, CASO CEQ, SALTE 5 POSIÇÕES PARA TRÁS
 
@@ -79,6 +81,8 @@ class Assembler():
             "KEY3":355,
             "RST":356,
             "FPGA_RESET":356,
+            "TIME":384,
+            "CLRT":509,
             "CLR1":510,
             "CLR0":511,
             "RA":0,
@@ -147,7 +151,7 @@ begin
         while next.strip() != "RET":
             line_index += 1
             next = self.data[line_index]
-            if next == "":
+            if next.strip() == "":
                 continue
             size_counter += 1
         self.finalMemoryAddress -= size_counter
